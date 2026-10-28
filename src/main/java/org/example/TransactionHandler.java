@@ -1,141 +1,96 @@
 package org.example;
-
 import java.sql.*;
 
 public class TransactionHandler {
-
-    public void deposit(int custId, double amount) {
-        String updateBal = "UPDATE customer SET balance = balance + ? WHERE cust_id = ?";
-        String logTxn = "INSERT INTO transactions (cust_id, txn_type, amount) VALUES (?, 'DEPOSIT', ?)";
-
+    public void deposit(int accountId, double amount) {
         Connection conn = null;
-        try {
+        try{
             conn = DBConnection.getConnection();
             conn.setAutoCommit(false);
-
-            try (PreparedStatement p1 = conn.prepareStatement(updateBal);
-                 PreparedStatement p2 = conn.prepareStatement(logTxn)) {
-
-                p1.setDouble(1, amount);
-                p1.setInt(2, custId);
-                if (p1.executeUpdate() == 0) {
-                    System.out.println("[Error] Customer not found.");
+            try(PreparedStatement p1 = conn.prepareStatement("update account SET balance = balance + ? WHERE account_id = ?");
+                 PreparedStatement p2 = conn.prepareStatement("insert INTO transactions(account_id, txn_type, amount) VALUES (?, 'DEPOSIT', ?)")) {
+                   p1.setDouble(1, amount);
+                p1.setInt(2, accountId);
+                if(p1.executeUpdate()==0){
+                    System.out.println("[Error] Account not found.");
                     conn.rollback();
                     return;
                 }
-
-                p2.setInt(1, custId);
+                p2.setInt(1, accountId);
                 p2.setDouble(2, amount);
                 p2.executeUpdate();
-
                 conn.commit();
-                System.out.println("[Success] Deposit completed successfully!");
+                System.out.println("deposit completed successfully!");
             }
         } catch (SQLException e) {
-            rollbackQuietly(conn);
-            System.out.println("[Error] Deposit failed: " + e.getMessage());
+            if (conn != null) try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            System.out.println("Deposit failed: " + e.getMessage());
         } finally {
-            closeConnection(conn);
+            if (conn != null) try { conn.setAutoCommit(true); conn.close(); } catch (SQLException ex) { ex.printStackTrace(); }
         }
     }
 
-    public void withdraw(int custId, double amount) {
-        String updateBal = "UPDATE customer SET balance = balance - ? WHERE cust_id = ? AND balance >= ?";
-        String logTxn = "INSERT INTO transactions (cust_id, txn_type, amount) VALUES (?, 'WITHDRAWAL', ?)";
+    public void withdraw(int accountId, double amount) {
+        String updateBal = "update account SET balance = balance - ? WHERE account_id = ? AND balance >= ?";
 
         Connection conn = null;
         try {
             conn = DBConnection.getConnection();
             conn.setAutoCommit(false);
 
-            try (PreparedStatement p1 = conn.prepareStatement(updateBal);
-                 PreparedStatement p2 = conn.prepareStatement(logTxn)) {
-
-                p1.setDouble(1, amount);
-                p1.setInt(2, custId);
+            try (PreparedStatement p1 = conn.prepareStatement(updateBal)) {
+                    p1.setDouble(1, amount);
+                    p1.setInt(2, accountId);
                 p1.setDouble(3, amount);
-
                 if (p1.executeUpdate() == 0) {
-                    System.out.println("[Error] Withdrawal failed. Either account not found or insufficient balance.");
+                    System.out.println("Withdrawal failed. Insufficient balance or invalid account ID.");
                     conn.rollback();
                     return;
                 }
-
-                p2.setInt(1, custId);
-                p2.setDouble(2, amount);
-                p2.executeUpdate();
-
                 conn.commit();
-                System.out.println("[Success] Withdrawal completed successfully!");
+                System.out.println("Withdrawal completed successfully!");
             }
         } catch (SQLException e) {
-            rollbackQuietly(conn);
-            System.out.println("[Error] Withdrawal failed: " + e.getMessage());
+            if (conn != null) try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            System.out.println("Withdrawal failed: " + e.getMessage());
         } finally {
-            closeConnection(conn);
+            if (conn != null) try { conn.setAutoCommit(true); conn.close(); } catch (SQLException ex) { ex.printStackTrace(); }
         }
     }
 
-    public void transfer(int senderId, int receiverId, double amount) {
-        String deductSender = "UPDATE customer SET balance = balance - ? WHERE cust_id = ? AND balance >= ?";
-        String addReceiver = "UPDATE customer SET balance = balance + ? WHERE cust_id = ?";
-        String logTxn = "INSERT INTO transactions (cust_id, txn_type, amount) VALUES (?, 'TRANSFER', ?)";
-
+    public void transfer(int senderAccId, int receiverAccId, double amount) {
         Connection conn = null;
         try {
             conn = DBConnection.getConnection();
             conn.setAutoCommit(false);
 
-            // 1. Deduct from Sender
-            try (PreparedStatement p1 = conn.prepareStatement(deductSender)) {
+            try (PreparedStatement p1 = conn.prepareStatement("UPDATE account SET balance = balance - ? WHERE account_id = ? AND balance >= ?")) {
                 p1.setDouble(1, amount);
-                p1.setInt(2, senderId);
-                p1.setDouble(3, amount);
+                    p1.setInt(2, senderAccId);
+                    p1.setDouble(3, amount);
                 if (p1.executeUpdate() == 0) {
-                    System.out.println("[Error] Transfer failed: Invalid sender ID or insufficient funds.");
+                    System.out.println("transfer failed: Insufficient funds or invalid sender account.");
                     conn.rollback();
                     return;
                 }
             }
-
-            // 2. Add to Receiver
-            try (PreparedStatement p2 = conn.prepareStatement(addReceiver)) {
-                p2.setDouble(1, amount);
-                p2.setInt(2, receiverId);
-                if (p2.executeUpdate() == 0) {
-                    System.out.println("[Error] Transfer failed: Receiver ID not found. Rolling back.");
+            try (PreparedStatement p2 = conn.prepareStatement("UPDATE account SET balance = balance + ? WHERE account_id = ?")) {
+                   p2.setDouble(1, amount);
+                p2.setInt(2, receiverAccId);
+                if(p2.executeUpdate()==0){
+                    System.out.println("transfer failed: Receiver account not found.");
                     conn.rollback();
                     return;
                 }
             }
-
-            // 3. Log transaction for sender
-            try (PreparedStatement p3 = conn.prepareStatement(logTxn)) {
-                p3.setInt(1, senderId);
-                p3.setDouble(2, amount);
-                p3.executeUpdate();
-            }
-
             conn.commit();
-            System.out.println("[Success] Transfer completed successfully!");
+            System.out.println("transfer completed successfully!");
 
-        } catch (SQLException e) {
-            rollbackQuietly(conn);
-            System.out.println("[Error] Transfer failed: " + e.getMessage());
+        } catch(SQLException e){
+            if(conn!=null) try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            System.out.println("transfer failed: " + e.getMessage());
         } finally {
-            closeConnection(conn);
-        }
-    }
-
-    private void rollbackQuietly(Connection conn) {
-        if (conn != null) {
-            try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
-        }
-    }
-
-    private void closeConnection(Connection conn) {
-        if (conn != null) {
-            try { conn.setAutoCommit(true); conn.close(); } catch (SQLException ex) { ex.printStackTrace(); }
+            if (conn != null) try { conn.setAutoCommit(true); conn.close(); } catch (SQLException ex) { ex.printStackTrace(); }
         }
     }
 }

@@ -4,6 +4,7 @@ import java.util.Scanner;
 public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
+
         BankHandler bankDAO = new BankHandler();
         BranchHandler branchDAO = new BranchHandler();
         AdminHandler adminDAO = new AdminHandler();
@@ -13,7 +14,6 @@ public class Main {
         LoanProcesses loanDAO = new LoanProcesses();
 
         // *** AI Generated ===>
-
         while (true) {
             System.out.println("\n========================================");
             System.out.println("   BANKING SYSTEM (POSTGRESQL CONSOLE)  ");
